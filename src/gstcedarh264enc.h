@@ -56,6 +56,10 @@ struct _Gstcedarh264enc
 	GstPad *sinkpad, *srcpad;
 
 	gboolean silent;
+        gint keyframe;
+	gint profile_idc;
+	gint level_idc;
+	gint qp;
   
 	int width;
 	int height;

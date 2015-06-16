@@ -4,7 +4,7 @@ plugin_LTLIBRARIES = libgstcedar.la
 
 # sources used to compile this plug-in
 libgstcedar_la_SOURCES = gstcedarh264enc.c gstcedarh264enc.h \
-	ve.c ve.h
+	ve.c ve.h h264enc.c h264enc.h
 
 # compiler and linker flags used to compile this plugin, set in configure.ac
 libgstcedar_la_CFLAGS = $(GST_CFLAGS)
