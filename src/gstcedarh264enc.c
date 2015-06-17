@@ -220,6 +220,7 @@ gst_cedarh264enc_init (Gstcedarh264enc * filter,
   gst_element_add_pad (GST_ELEMENT (filter), filter->sinkpad);
   gst_element_add_pad (GST_ELEMENT (filter), filter->srcpad);
   filter->silent = FALSE;
+  filter->keyframe = 25;
   filter->profile_idc = 71;
   filter->level_idc = 41;
   filter->qp = 30;
