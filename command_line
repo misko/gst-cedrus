@@ -1,0 +1,1 @@
+gst-launch-0.10 v4l2src  ! ffmpegcolorspace ! cedar_h264enc keyframe=25 profile_idc=66 level_idc=11 ! rtph264pay pt=96 config-interval=1 ! udpsink host=petbot.ca sync=false async=false port=60320
