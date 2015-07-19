@@ -314,7 +314,7 @@ int h264enc_encode_picture(h264enc *c)
 {
 	c->current_slice_type = c->current_frame_num ? SLICE_P : SLICE_I;
 
-	c->regs = ve_get(VE_ENGINE_AVC, 0);
+	c->regs = ve_get(VE_ENGINE_AVC, 0); //VeGetRegisterBaseAddress ? //address_macc
 
 	/* flush buffers (output because otherwise we might read old data later) */
 	ve_flush_cache(c->bytestream_buffer, c->bytestream_buffer_size);

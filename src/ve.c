@@ -17,6 +17,7 @@
  *
  */
 
+#include <semaphore.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -84,6 +85,7 @@ static struct
 	struct memchunk_t first_memchunk;
 	pthread_rwlock_t memory_lock;
 	pthread_mutex_t device_lock;
+        sem_t * device_sem; //MISKO
 } ve = { .fd = -1, .memory_lock = PTHREAD_RWLOCK_INITIALIZER, .device_lock = PTHREAD_MUTEX_INITIALIZER };
 
 int ve_open(void)
@@ -92,6 +94,13 @@ int ve_open(void)
 		return 0;
 
 	struct ve_info info;
+
+	//MISKO
+	if ((ve.device_sem = sem_open("mysemaphore", O_CREAT, 0644, 1)) == SEM_FAILED) {
+	    perror("semaphore initilization");
+	    exit(1);
+	}
+
 
 	ve.fd = open(DEVICE, O_RDWR);
 	if (ve.fd == -1)
@@ -158,6 +167,8 @@ void *ve_get(int engine, uint32_t flags)
 	if (pthread_mutex_lock(&ve.device_lock))
 		return NULL;
 
+	sem_wait(ve.device_sem); 
+		
 	writel(0x00130000 | (engine & 0xf) | (flags & ~0xf), ve.regs + VE_CTRL);
 
 	return ve.regs;
@@ -166,6 +177,7 @@ void *ve_get(int engine, uint32_t flags)
 void ve_put(void)
 {
 	writel(0x00130007, ve.regs + VE_CTRL);
+	sem_post(ve.device_sem); 
 	pthread_mutex_unlock(&ve.device_lock);
 }
 
