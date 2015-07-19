@@ -307,7 +307,11 @@ gst_cedarh264enc_set_caps (GstPad * pad, GstCaps * caps)
 			"width", G_TYPE_INT, filter->width,
 			"height", G_TYPE_INT, filter->height,
 			"framerate", GST_TYPE_FRACTION, fps_num, fps_den,
-			"profile", G_TYPE_STRING, "main", NULL);
+			"profile", G_TYPE_STRING, filter->profile_idc==66 ? "baseline" : "main" , NULL);
+		if (filter->profile_idc!=66 && filter->profile_idc!=77) {
+			fprintf(stderr,"please use either baseline or main\n");
+			exit(1);
+		}
 		
 		gst_object_unref (filter);
 		ret = gst_pad_set_caps (otherpad, othercaps);
@@ -408,7 +412,7 @@ static GstStateChangeReturn
 			cedarelement->tile_w = cedarelement->tile_w2 = cedarelement->tile_h = cedarelement->tile_h2 = 0;
 			cedarelement->mb_w = cedarelement->mb_h = cedarelement->plane_size = 0;
 			//cedarelement->ve_regs = NULL;
-			//ve_close();
+			ve_close();
 			//h264enc_free(encoder);
 			break;
 		default:
