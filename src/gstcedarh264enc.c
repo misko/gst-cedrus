@@ -408,7 +408,7 @@ static GstStateChangeReturn
 			cedarelement->tile_w = cedarelement->tile_w2 = cedarelement->tile_h = cedarelement->tile_h2 = 0;
 			cedarelement->mb_w = cedarelement->mb_h = cedarelement->plane_size = 0;
 			//cedarelement->ve_regs = NULL;
-			//ve_close();
+			ve_close();
 			//h264enc_free(encoder);
 			break;
 		default:
