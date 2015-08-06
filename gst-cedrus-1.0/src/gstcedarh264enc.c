@@ -133,7 +133,6 @@ static GstFlowReturn gst_cedarh264enc_chain (GstPad * pad, GstObject * parent, G
 
 static gboolean alloc_cedar_bufs(Gstcedarh264enc *cedarelement)
 {
-        g_print("ALLOC!\n");
 	params.src_width = (cedarelement->width + 15) & ~15;
 	params.width = cedarelement->width;
 	params.src_height = (cedarelement->height + 15) & ~15;
@@ -150,7 +149,6 @@ static gboolean alloc_cedar_bufs(Gstcedarh264enc *cedarelement)
 	
  	cedarelement->output_buf = h264enc_get_bytestream_buffer(encoder);
         cedarelement->input_buf = h264enc_get_input_buffer(encoder);
-        g_print("DONE ALLOC!\n");
 	
 	return TRUE;
 }
@@ -163,39 +161,19 @@ gst_cedarh264enc_query (GstPad    *pad,
 		         GstQuery  *query)
 {
   gboolean ret;
-  Gstcedarh264enc *filter = GST_CEDARH264ENC (parent);
+  //Gstcedarh264enc *filter = GST_CEDARH264ENC (parent);
   switch (GST_QUERY_TYPE (query)) {
     case GST_QUERY_CAPS:
-      /* we should report the supported caps here */
-      //set the caps for the srcpad
-      //GstCaps *capssrc = gst_pad_get_allowed_caps (filter->srcpad);
-      //GstCaps *capssink = gst_pad_get_allowed_caps (filter->sinkpad);
-      //g_print("CAPS SRC %p SINK %p \n",capssrc,capssink);
-      g_print("GST_QUERY_CAPS %s\n",pad==filter->srcpad ? "SRC" : "SINK");
-      //ret = gst_pad_query_default (pad, parent, query);
-      GstPad *otherpad;
-      GstCaps *temp, *caps, *filt, *tcaps;
-      gint i;
-
-
-      /* We support *any* samplerate, indifferent from the samplerate
-       * supported by the linked elements on both sides. */
-      //for (i = 0; i < gst_caps_get_size (caps); i++) {
-      //  GstStructure *structure = gst_caps_get_structure (caps, i);
-	//
-      //  gst_structure_remove_field (structure, "rate");
-      //}
-
-      /* make sure we only return results that intersect our
-       * padtemplate */
-      tcaps = gst_pad_get_pad_template_caps (pad);
-      g_print("CAPS P %p\n",tcaps);
-gchar *capsstr; 
-capsstr = gst_caps_to_string (tcaps);
-g_print ("caps: %s\n", capsstr); 
-g_free (capsstr); 
+      {
+      //g_print("GST_QUERY_CAPS %s\n",pad==filter->srcpad ? "SRC" : "SINK");
+      GstCaps *tcaps  = gst_pad_get_pad_template_caps (pad);
+      /*gchar *capsstr; 
+      capsstr = gst_caps_to_string (tcaps);
+      g_print ("caps: %s\n", capsstr); 
+      g_free (capsstr); */
       gst_query_set_caps_result (query, tcaps);
       ret = TRUE;
+      } 
       break;
     default:
       /* just call the default handler */
@@ -261,8 +239,6 @@ gst_cedarh264enc_init (Gstcedarh264enc * filter)
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
   gst_pad_set_event_function (filter->sinkpad,
                               GST_DEBUG_FUNCPTR(gst_cedarh264enc_sink_event));
-  //gst_pad_set_setcaps_function (filter->sinkpad,
-  //                              GST_DEBUG_FUNCPTR(gst_cedarh264enc_set_caps));
   gst_pad_set_chain_function (filter->sinkpad,
                               GST_DEBUG_FUNCPTR(gst_cedarh264enc_chain));
   GST_PAD_SET_PROXY_CAPS (filter->sinkpad);
@@ -342,58 +318,23 @@ gst_cedarh264enc_get_property (GObject * object, guint prop_id,
 
 /* GstElement vmethod implementations */
 
-static gboolean
-gst_cedarh264enc_setcaps (Gstcedarh264enc *filter,GstCaps *caps) {
-  GstStructure *structure;
-  //int rate, channels;
-  gboolean ret;
-  GstCaps *outcaps;
-  GstVideoInfo info;
-  int fps_num, fps_den;
-
-  //lets get info from current caps
-  gst_video_info_init(&info);
-  gst_video_info_from_caps(&info, caps);
-
-  outcaps = gst_caps_copy (gst_pad_get_pad_template_caps(filter->srcpad));
-  gst_caps_set_simple (outcaps,
-	"width", G_TYPE_INT, filter->width,
-	"height", G_TYPE_INT, filter->height,
-	"framerate", GST_TYPE_FRACTION, info.fps_n, info.fps_d,
-	"profile", G_TYPE_STRING, filter->profile_idc==66 ? "baseline" : "main" , NULL);
-  if (filter->profile_idc!=66 && filter->profile_idc!=77) {
-  	g_print("please use either baseline or main\n");
-  	exit(1);
-  }
-  
-
-  ret = gst_pad_set_caps (filter->srcpad, outcaps);
-  gst_caps_unref (outcaps);
-
-  return ret;
-}
 
 /* this function handles sink events */
 //http://gstreamer.freedesktop.org/data/doc/gstreamer/head/pwg/html/section-nego-usecases.html
 static gboolean
 gst_cedarh264enc_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 {
-  gboolean ret;
+  gboolean ret=FALSE;
   Gstcedarh264enc *filter;
-  g_print("SINK EVENT!\n");
   filter = GST_CEDARH264ENC (parent);
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CAPS:
     {
       GstCaps * caps;
-      g_print("GST_EVENT_CAPS\n");
       gst_event_parse_caps (event, &caps);
-      //gst_cedarh264enc_setcaps(filter,caps);
       if (pad == filter->sinkpad) {
 	        GstPad * otherpad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
- 		g_print("setting caps.... for real\n"); 
-		int ret;
 		GstVideoInfo info;
 
 		//lets get info from current caps
@@ -401,8 +342,6 @@ gst_cedarh264enc_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 		gst_video_info_from_caps(&info, caps);
 		filter->width=info.width;
 		filter->height=info.height;	
-		//gst_video_format_parse_caps(caps, NULL, &filter->width, &filter->height);
-		//gst_video_parse_caps_framerate(caps, &fps_num, &fps_den);
 		
 		GstCaps * othercaps = gst_caps_copy (gst_pad_get_pad_template_caps(filter->srcpad));
 		gst_caps_set_simple (othercaps,
@@ -415,7 +354,6 @@ gst_cedarh264enc_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 			exit(1);
 		}
 		
-		//gst_object_unref (filter);
 		ret = gst_pad_set_caps (otherpad, othercaps);
 		gst_caps_unref(othercaps);
       } else {
@@ -438,7 +376,6 @@ gst_cedarh264enc_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 static GstFlowReturn
 gst_cedarh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
-  g_print("CEDAR | CHAIN\n");
   Gstcedarh264enc *filter;
   GstBuffer *outbuf;
 
@@ -547,7 +484,6 @@ static GstStateChangeReturn
 static gboolean
 cedarh264enc_init (GstPlugin * cedarh264enc)
 {
-   g_print("INIT!\n");
   /* debug category for fltering log messages
    *
    * exchange the string 'Template cedarh264enc' with your description
@@ -576,7 +512,7 @@ GST_PLUGIN_DEFINE (
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     cedarh264enc,
-    "Template cedarh264enc",
+    "CEDRUS cedarh264enc",
     cedarh264enc_init,
     VERSION,
     "LGPL",
