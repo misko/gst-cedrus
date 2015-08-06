@@ -72,6 +72,27 @@ struct _Gstcedarh264enc
   GstPad *sinkpad, *srcpad;
 
   gboolean silent;
+        gint keyframe;
+	gint profile_idc;
+	gint level_idc;
+	gint qp;
+  
+	int width;
+	int height;
+  
+	void *ve_regs;
+	void *input_buf;
+	void *output_buf;
+	void* reconstruct_buf;
+	void* small_luma_buf;
+	void* mb_info_buf;
+	int tile_w;
+	int tile_w2;
+	int tile_h;
+	int tile_h2;
+	int mb_w;
+	int mb_h;
+	int plane_size;
 };
 
 struct _Gstcedarh264encClass 
