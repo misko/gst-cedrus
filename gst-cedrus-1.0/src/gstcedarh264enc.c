@@ -399,7 +399,8 @@ gst_cedarh264enc_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 		//lets get info from current caps
 		gst_video_info_init(&info);
 		gst_video_info_from_caps(&info, caps);
-		
+		filter->width=info.width;
+		filter->height=info.height;	
 		//gst_video_format_parse_caps(caps, NULL, &filter->width, &filter->height);
 		//gst_video_parse_caps_framerate(caps, &fps_num, &fps_den);
 		
