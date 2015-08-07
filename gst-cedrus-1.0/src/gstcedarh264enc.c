@@ -88,7 +88,8 @@ enum
   PROP_KEYFRAME,
   PROP_PROFILE_IDC,
   PROP_LEVEL_IDC,
-  PROP_QP
+  PROP_QP,
+  PROP_SPS
 };
 
 /* the capabilities of the inputs and outputs.
@@ -224,6 +225,9 @@ gst_cedarh264enc_class_init (Gstcedarh264encClass * klass)
   g_object_class_install_property (gobject_class, PROP_QP,
       g_param_spec_int ("qp", "qp", "qp",1,254,
           30, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_SPS,
+      g_param_spec_int ("sps", "sps", "sps",0,1,
+          1, G_PARAM_READWRITE));
 }
 
 /* initialize the new element
@@ -282,6 +286,11 @@ gst_cedarh264enc_set_property (GObject * object, guint prop_id,
     case PROP_QP:
       filter->qp = g_value_get_int(value);
       break;
+    case PROP_SPS:
+      fprintf(stderr,"SET TO WRITE SPS!!\n");
+      encoder->write_sps_pps=1;
+      encoder->current_frame_num=0;
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -309,6 +318,9 @@ gst_cedarh264enc_get_property (GObject * object, guint prop_id,
       break;
     case PROP_QP:
       g_value_set_int (value, filter->qp);
+      break;
+    case PROP_SPS:
+      g_value_set_int (value, encoder->write_sps_pps);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
