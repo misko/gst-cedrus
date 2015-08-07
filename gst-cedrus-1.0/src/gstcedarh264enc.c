@@ -238,6 +238,7 @@ gst_cedarh264enc_class_init (Gstcedarh264encClass * klass)
 static void
 gst_cedarh264enc_init (Gstcedarh264enc * filter)
 {
+   encoder=NULL;
    g_print("INITX2!\n");
   //sink pad
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
@@ -276,15 +277,27 @@ gst_cedarh264enc_set_property (GObject * object, guint prop_id,
       break;
     case PROP_KEYFRAME:
       filter->keyframe = g_value_get_int(value);
+      if (encoder!=NULL) {
+	encoder->keyframe_interval = g_get_value_int(value);
+      }
       break;
     case PROP_PROFILE_IDC:
       filter->profile_idc = g_value_get_int(value);
+      if (encoder!=NULL) {
+	encoder->profile_idc = g_get_value_int(value);
+      }
       break;
     case PROP_LEVEL_IDC:
       filter->level_idc = g_value_get_int(value);
+      if (encoder!=NULL) {
+	encoder->level_idc = g_get_value_int(value);
+      }
       break;
     case PROP_QP:
       filter->qp = g_value_get_int(value);
+      if (encoder!=NULL) {
+	encoder->pic_init_qp = g_get_value_int(value);
+      }
       break;
     case PROP_SPS:
       fprintf(stderr,"SET TO WRITE SPS!!\n");
