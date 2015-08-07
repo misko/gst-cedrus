@@ -330,6 +330,7 @@ gst_cedarh264enc_set_caps (GstPad * pad, GstCaps * caps)
 static GstFlowReturn
 gst_cedarh264enc_chain (GstPad * pad, GstBuffer * buf)
 {
+	//fprintf(stderr,"Start encode\n");
 	Gstcedarh264enc *filter;
 	GstBuffer *outbuf;
 
@@ -353,7 +354,6 @@ gst_cedarh264enc_chain (GstPad * pad, GstBuffer * buf)
 	}
 	
 	memcpy(filter->input_buf, GST_BUFFER_DATA(buf), GST_BUFFER_SIZE(buf));
-	//fprintf(stderr,"memories %p vs %p\n", filter->input_buf, h264enc_get_input_buffer(encoder));
 	h264enc_encode_picture(encoder);	
 
 	// TODO: use gst_pad_alloc_buffer
@@ -362,9 +362,11 @@ gst_cedarh264enc_chain (GstPad * pad, GstBuffer * buf)
 	gst_buffer_set_caps(outbuf, GST_PAD_CAPS(filter->srcpad));
 	memcpy(GST_BUFFER_DATA(outbuf), filter->output_buf, GST_BUFFER_SIZE(outbuf));
 	GST_BUFFER_TIMESTAMP(outbuf) = GST_BUFFER_TIMESTAMP(buf);
-	
 	gst_buffer_unref(buf);
-	return gst_pad_push (filter->srcpad, outbuf);
+	//fprintf(stderr,"End encode\n");
+	GstFlowReturn r =  gst_pad_push (filter->srcpad, outbuf);
+	//fprintf(stderr,"End encode x2\n");
+	return r;
 }
 
 static GstStateChangeReturn
@@ -380,13 +382,6 @@ static GstStateChangeReturn
 				return GST_STATE_CHANGE_FAILURE;
 			}
 			
-			//cedarelement->ve_regs = ve_get_regs();
-
-			/*if (!cedarelement->ve_regs) {
-				GST_ERROR("Cannot get VE regs");
-				ve_close();
-				return GST_STATE_CHANGE_FAILURE;
-			}*/
 			
 			break;
 		case GST_STATE_CHANGE_READY_TO_PAUSED:
