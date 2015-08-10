@@ -89,7 +89,8 @@ enum
   PROP_PROFILE_IDC,
   PROP_LEVEL_IDC,
   PROP_QP,
-  PROP_SPS
+  PROP_SPS,
+  PROP_D_QP
 };
 
 /* the capabilities of the inputs and outputs.
@@ -134,6 +135,10 @@ static GstFlowReturn gst_cedarh264enc_chain (GstPad * pad, GstObject * parent, G
 
 static gboolean alloc_cedar_bufs(Gstcedarh264enc *cedarelement)
 {
+	if (encoder!=NULL) {
+		fprintf(stderr,"FREE OLD ENCODER\n");
+		h264enc_free(encoder);
+	}
 	params.src_width = (cedarelement->width + 15) & ~15;
 	params.width = cedarelement->width;
 	params.src_height = (cedarelement->height + 15) & ~15;
@@ -225,6 +230,9 @@ gst_cedarh264enc_class_init (Gstcedarh264encClass * klass)
   g_object_class_install_property (gobject_class, PROP_QP,
       g_param_spec_int ("qp", "qp", "qp",1,254,
           30, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_D_QP,
+      g_param_spec_int ("d_qp", "d_qp", "qp",-50,50,
+          0, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_SPS,
       g_param_spec_int ("sps", "sps", "sps",0,1,
           1, G_PARAM_READWRITE));
@@ -278,31 +286,31 @@ gst_cedarh264enc_set_property (GObject * object, guint prop_id,
     case PROP_KEYFRAME:
       filter->keyframe = g_value_get_int(value);
       if (encoder!=NULL) {
-	encoder->keyframe_interval = g_get_value_int(value);
+	encoder->keyframe_interval = filter->keyframe;
       }
       break;
     case PROP_PROFILE_IDC:
       filter->profile_idc = g_value_get_int(value);
       if (encoder!=NULL) {
-	encoder->profile_idc = g_get_value_int(value);
+	encoder->profile_idc = filter->profile_idc;
       }
       break;
     case PROP_LEVEL_IDC:
       filter->level_idc = g_value_get_int(value);
       if (encoder!=NULL) {
-	encoder->level_idc = g_get_value_int(value);
+	encoder->level_idc = filter->level_idc;
       }
       break;
     case PROP_QP:
       filter->qp = g_value_get_int(value);
-      if (encoder!=NULL) {
-	encoder->pic_init_qp = g_get_value_int(value);
-      }
+      break;
+    case PROP_D_QP:
+      filter->d_qp = g_value_get_int(value);
       break;
     case PROP_SPS:
       fprintf(stderr,"SET TO WRITE SPS!!\n");
-      encoder->write_sps_pps=1;
-      encoder->current_frame_num=0;
+      filter->write_sps_pps=1;
+      filter->write_keyframe=1;
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -331,6 +339,9 @@ gst_cedarh264enc_get_property (GObject * object, guint prop_id,
       break;
     case PROP_QP:
       g_value_set_int (value, filter->qp);
+      break;
+    case PROP_D_QP:
+      g_value_set_int (value, filter->d_qp);
       break;
     case PROP_SPS:
       g_value_set_int (value, encoder->write_sps_pps);
@@ -406,15 +417,41 @@ gst_cedarh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   filter = GST_CEDARH264ENC (parent);
 
+
   GstMapInfo in_map, out_map;
 
   if (!filter->input_buf || !filter->output_buf) {
+	fprintf(stderr,"ALLOC CEDAR\n");
   	if (!alloc_cedar_bufs(filter)) {
   		GST_ERROR("Cannot allocate cedar buffers");
   		return GST_FLOW_ERROR;
   	}
   }
 
+  //see if any parameters have changed, worst case make a new encoder
+  if (filter->write_sps_pps==1) {
+	filter->write_sps_pps=0;
+	encoder->write_sps_pps=1;
+  }
+  if (filter->write_keyframe==1) {
+ 	filter->write_keyframe=0;
+	encoder->current_frame_num=0;
+  }
+  if (filter->d_qp!=encoder->d_qp) {
+	encoder->d_qp=filter->d_qp;
+  }
+  if (filter->qp!=encoder->pic_init_qp) {
+	fprintf(stderr,"Changing QP from %d to %d\n",filter->qp, encoder->pic_init_qp);
+  	/*if (!alloc_cedar_bufs(filter)) {
+  		GST_ERROR("Cannot allocate cedar buffers");
+  		return GST_FLOW_ERROR;
+  	}*/
+	encoder->sps_id++;
+	encoder->pps_id++;
+	encoder->pic_init_qp = filter->qp;
+	encoder->write_sps_pps=1;
+	encoder->current_frame_num=0;
+  }
   //map the input
   gst_buffer_map (buf, &in_map, GST_MAP_READ);
 

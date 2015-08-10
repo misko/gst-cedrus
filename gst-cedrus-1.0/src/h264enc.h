@@ -71,6 +71,10 @@ struct h264enc_internal {
 
 	unsigned int keyframe_interval;
 
+	uint32_t sps_id;
+	uint32_t pps_id;
+	int32_t d_qp;
+
 	unsigned int current_frame_num;
 	enum slice_type { SLICE_P = 0, SLICE_I = 2 } current_slice_type;
 

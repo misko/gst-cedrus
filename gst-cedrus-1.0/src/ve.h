@@ -130,6 +130,7 @@ static inline uint32_t readl(void *addr)
 #define VE_AVC_TRIGGER			0xb18
 #define VE_AVC_STATUS			0xb1c
 #define VE_AVC_BASIC_BITS		0xb20
+#define VE_AVC_UNK_STATS		0xb5c
 #define VE_AVC_UNK_BUF			0xb60
 #define VE_AVC_VLE_ADDR			0xb80
 #define VE_AVC_VLE_END			0xb84

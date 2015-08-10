@@ -77,10 +77,12 @@ static void put_seq_parameter_set(h264enc *c)
 	put_start_code(c->regs, 3, 7);
 
 	put_bits(c->regs, c->profile_idc, 8);
+	//fprintf(stderr,"%d %d\n",c->profile_idc,c->level_idc);
 	put_bits(c->regs, c->constraints, 8);
 	put_bits(c->regs, c->level_idc, 8);
 
-	put_ue(c->regs, /* seq_parameter_set_id = */ 0);
+	//put_ue(c->regs, /* seq_parameter_set_id = */ 0);
+	put_ue(c->regs, /* seq_parameter_set_id = */ c->sps_id);
 
 	put_ue(c->regs, /* log2_max_frame_num_minus4 = */ 0);
 	put_ue(c->regs, /* pic_order_cnt_type = */ 2);
@@ -114,8 +116,10 @@ static void put_pic_parameter_set(h264enc *c)
 {
 	put_start_code(c->regs, 3, 8);
 
-	put_ue(c->regs, /* pic_parameter_set_id = */ 0);
-	put_ue(c->regs, /* seq_parameter_set_id = */ 0);
+	//put_ue(c->regs, /* pic_parameter_set_id = */ 0);
+	put_ue(c->regs, /* pic_parameter_set_id = */ c->pps_id);
+	//put_ue(c->regs, /* seq_parameter_set_id = */ 0);
+	put_ue(c->regs, /* seq_parameter_set_id = */ c->sps_id);
 
 	put_bits(c->regs, c->entropy_coding_mode_flag, 1);
 
@@ -148,7 +152,8 @@ static void put_slice_header(h264enc *c)
 
 	put_ue(c->regs, /* first_mb_in_slice = */ 0);
 	put_ue(c->regs, c->current_slice_type);
-	put_ue(c->regs, /* pic_parameter_set_id = */ 0);
+	//put_ue(c->regs, /* pic_parameter_set_id = */ 0);
+	put_ue(c->regs, /* pic_parameter_set_id = */ c->pps_id);
 
 	put_bits(c->regs, c->current_frame_num & 0xf, 4);
 
@@ -170,7 +175,7 @@ static void put_slice_header(h264enc *c)
 		put_bits(c->regs, /* long_term_reference_flag = */ 0, 1);
 	}
 
-	put_se(c->regs, /* slice_qp_delta = */ 0);
+	put_se(c->regs, /* slice_qp_delta = */ c->d_qp);
 
 	put_ue(c->regs, /* disable_deblocking_filter_idc = */ 0);
 	put_se(c->regs, /* slice_alpha_c0_offset_div2 = */ 0);
@@ -244,6 +249,9 @@ h264enc *h264enc_new(const struct h264enc_params *p)
 
 	c->write_sps_pps = 1;
 	c->current_frame_num = 0;
+	c->sps_id=0;
+	c->pps_id=0;
+	c->d_qp=-15;
 
 	/* allocate input buffer */
 	c->input_color_format = p->src_format;
@@ -376,16 +384,37 @@ int h264enc_encode_picture(h264enc *c)
 	if (c->current_slice_type == SLICE_P)
 		params |= 0x10;
 	writel(params, c->regs + VE_AVC_PARAM);
-	writel((4 << 16) | (c->pic_init_qp << 8) | c->pic_init_qp, c->regs + VE_AVC_QP);
-	writel(0x00000104, c->regs + VE_AVC_MOTION_EST);
+	//maximum quantizer step (def 4 for h264) , max , min quantizer? maybe? Misko
+	//writel((4 << 16) | ((c->pic_init_qp-5) << 8) | (c->pic_init_qp+5), c->regs + VE_AVC_QP);
+	//uint32_t r3 = readl(c->regs+VE_AVC_QP);
+	//writel((16 << 16) | ((c->pic_init_qp-10) << 8) | (c->pic_init_qp+10), c->regs + VE_AVC_QP);
+	//writel((4 << 16) | (51 << 8) | 10, c->regs + VE_AVC_QP);
+	writel((4 << 16) | ((c->pic_init_qp+c->d_qp) << 8) | (c->pic_init_qp+c->d_qp), c->regs + VE_AVC_QP);
+	//writel(0x00000104, c->regs + VE_AVC_MOTION_EST);
+
 
 	/* trigger encoding */
 	writel(0x8, c->regs + VE_AVC_TRIGGER);
 	ve_wait(1);
+	// both VE_AVC_UNK_STATS and 0x0b58 have bits that correspond to motion, dont seem to correlate to d_qp
+	/*uint32_t r = readl(c->regs+VE_AVC_UNK_STATS);
+	uint32_t r2 = readl(c->regs+0x0b58 );
+	fprintf(stderr,"ST  %08x %08x %d %s\n",r,r2,c->pic_init_qp+c->d_qp,c->current_frame_num ? "P" :"I");*/
+
+	//try to read back and print? 
+	/*r = readl(c->regs+0x0b60 );
+	fprintf(stderr,"UN  %08x\n",r);
+	r = readl(c->regs+0x0bc0 );
+	fprintf(stderr,"TM  %08x\n",r);
+	r = readl(c->regs+0x0b08 );
+	fprintf(stderr,"QP  %08x\n",r);
+	r = readl(c->regs+0x0b8c );
+	fprintf(stderr,"MXB %08x\n",r);*/
 
 	/* check result */
 	uint32_t status = readl(c->regs + VE_AVC_STATUS);
 	writel(status, c->regs + VE_AVC_STATUS);
+
 
 	/* save bytestream length */
 	c->bytestream_length = readl(c->regs + VE_AVC_VLE_LENGTH) / 8;

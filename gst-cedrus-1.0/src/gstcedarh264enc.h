@@ -76,6 +76,9 @@ struct _Gstcedarh264enc
 	gint profile_idc;
 	gint level_idc;
 	gint qp;
+	gint d_qp;
+	gint write_sps_pps;
+	gint write_keyframe;
   
 	int width;
 	int height;
