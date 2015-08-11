@@ -200,6 +200,31 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
 
 	value = 0;			//degree
 	VideoEncSetParameter (pVideoEnc, VENC_IndexParamRotation, &value);
+
+	VencCyclicIntraRefresh sIntraRefresh;
+	sIntraRefresh.bEnable = 1;
+        sIntraRefresh.nBlockNumber = 10;
+	VideoEncSetParameter (pVideoEnc, VENC_IndexParamH264CyclicIntraRefresh, &sIntraRefresh);
+/*
+//from https://github.com/leviathanch/media-codec/blob/fe9c4029af2d772a5a07cbdeb8daf1cbf0ab3d15/sunxi-cedarx/openmax/venc/omx_venc.cpp
+case OMX_IndexParamVideoIntraRefresh:
+{
+	OMX_VIDEO_PARAM_INTRAREFRESHTYPE* pComponentParam = (OMX_VIDEO_PARAM_INTRAREFRESHTYPE*)paramData;
+	if(pComponentParam->nPortIndex == 1 && pComponentParam->eRefreshMode == OMX_VIDEO_IntraRefreshCyclic)
+	{
+		int mbWidth, mbHeight;
+		mbWidth = (m_sInPortDef.format.video.nFrameWidth + 15)/16;
+		mbHeight = (m_sInPortDef.format.video.nFrameHeight + 15)/16;
+		m_vencCyclicIntraRefresh.bEnable = 1;
+		m_vencCyclicIntraRefresh.nBlockNumber = mbWidth*mbHeight/pComponentParam->nCirMBs;
+		logd("m_vencCyclicIntraRefresh.nBlockNumber: %d", m_vencCyclicIntraRefresh.nBlockNumber);
+	}
+break;			
+}
+*/
+
+
+
 	fprintf(stderr,"ALLOC CEDARX AND INIT x2\n");
 
   	VideoEncInit (pVideoEnc, &baseConfig);
@@ -507,23 +532,23 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   inputBuffer.sCropInfo.nTop = 240;
   inputBuffer.sCropInfo.nWidth = 240;
   inputBuffer.sCropInfo.nHeight = 240;
-  //fprintf(stderr,"IN CHIAN\n");
+  fprintf(stderr,"IN CHIAN\n");
 
   FlushCacheAllocInputBuffer (pVideoEnc, &inputBuffer);
 
-  //fprintf(stderr,"AddOneInputBuffer\n");
+  fprintf(stderr,"AddOneInputBuffer\n");
   AddOneInputBuffer (pVideoEnc, &inputBuffer);
-  //fprintf(stderr,"Encode\n");
+  fprintf(stderr,"Encode\n");
   VideoEncodeOneFrame (pVideoEnc);
-  //fprintf(stderr,"AlreadyUnused\n");
+  fprintf(stderr,"AlreadyUnused\n");
 
   AlreadyUsedInputBuffer (pVideoEnc, &inputBuffer);
   ReturnOneAllocInputBuffer (pVideoEnc, &inputBuffer);
-  //fprintf(stderr,"GetOneBitstream\n");
+  fprintf(stderr,"GetOneBitstream\n");
 
   GetOneBitstreamFrame (pVideoEnc, &outputBuffer);
   
-  //fprintf(stderr, "%08x %d %lld\n",outputBuffer.nFlag,outputBuffer.nID, outputBuffer.nPts);
+  fprintf(stderr, "%08x %d %lld\n",outputBuffer.nFlag,outputBuffer.nID, outputBuffer.nPts);
   // TODO: use gst_pad_alloc_buffer
   //fprintf(stderr,"LENGTH OF ENCODED %u\n",encoder->bytestream_length);
   //fwrite (sps_pps_data.pBuffer, 1, sps_pps_data.nLength, out_file);
