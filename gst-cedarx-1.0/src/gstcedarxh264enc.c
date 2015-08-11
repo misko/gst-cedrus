@@ -189,19 +189,22 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
         if (cedarelement->level_idc!=0) {
 		h264Param.sProfileLevel.nLevel = cedarelement->level_idc;
 	}
+	//how far we are willing the QP to vary?
 	h264Param.sQPRange.nMinqp = 10;
 	h264Param.sQPRange.nMaxqp = 40;
 
-
+	//make the actual encoder object
 	pVideoEnc = VideoEncCreate (codecType);
 	VideoEncSetParameter (pVideoEnc, VENC_IndexParamH264Param, &h264Param);
 
+	//set two parameters found in example
 	int value=0;
 	VideoEncSetParameter (pVideoEnc, VENC_IndexParamIfilter, &value);
 
 	value = 0;			//degree
 	VideoEncSetParameter (pVideoEnc, VENC_IndexParamRotation, &value);
 
+	//set cyclic intrarefresh - default nBlockNumber?
 	VencCyclicIntraRefresh sIntraRefresh;
 	sIntraRefresh.bEnable = 1;
         sIntraRefresh.nBlockNumber = 10;
@@ -224,25 +227,14 @@ break;
 }
 */
 
-
-
-	fprintf(stderr,"ALLOC CEDARX AND INIT x2\n");
-
   	VideoEncInit (pVideoEnc, &baseConfig);
-                unsigned int head_num = 0;
-                VideoEncGetParameter(pVideoEnc, VENC_IndexParamH264SPSPPS, &sps_pps_data);
+        VideoEncGetParameter(pVideoEnc, VENC_IndexParamH264SPSPPS, &sps_pps_data); //THIS NEEDS TO STAY HERE! OR EVERYTHING BREAKS...
+        assert(sps_pps_data.nLength>0);
                 //logd("sps_pps_data.nLength: %d", sps_pps_data.nLength);
                 //for(head_num=0; head_num<sps_pps_data.nLength; head_num++)
                 //        logd("the sps_pps :%02x\n", *(sps_pps_data.pBuffer+head_num));
-        assert(sps_pps_data.nLength>0);
-
-	fprintf(stderr,"ALLOC CEDARX AND INIT x2\n");
 
 	AllocInputBuffer (pVideoEnc, &bufferParam);
-	fprintf(stderr,"ALLOC CEDARX AND INIT - DONE\n");
-	fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
-
-	
 	return TRUE;
 }
 
@@ -378,7 +370,6 @@ gst_cedarxh264enc_set_property (GObject * object, guint prop_id,
       filter->bitrate = g_value_get_int(value);
       break;
     case PROP_SPS:
-      fprintf(stderr,"SET TO WRITE SPS!!\n");
       filter->write_sps_pps=1;
       filter->write_keyframe=1;
       break;
@@ -480,7 +471,7 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   filter = GST_CEDARXH264ENC (parent);
 
- // fprintf(stderr,"Start chain\n");
+  //if we have not initialized the engine, do it now
   if (pVideoEnc==NULL) {
 	alloc_cedar_bufs(filter);
 
@@ -501,65 +492,49 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     return gst_pad_push (filter->srcpad, outbuf);
   }
 
+
+  //if we force write keyframe
   if (filter->write_keyframe==1) {
     int value=1;
     VideoEncSetParameter (pVideoEnc, VENC_IndexParamForceKeyFrame, &value);
     filter->write_keyframe=0;
   }
 
+  //if user set bitrate and HW bitrate is out of sync, sync it
   if (bitrate!=filter->bitrate) {
     int value=bitrate;
     VideoEncSetParameter (pVideoEnc, VENC_IndexParamBitrate, &value);
     bitrate=filter->bitrate;
   }
- //fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
- // fprintf(stderr,"Alloc input buffer\n");
+
   GetOneAllocInputBuffer (pVideoEnc, &inputBuffer);
- // fprintf(stderr,"Alloc input buffer - done\n");
-  
-  // fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
-  //memcpy(filter->input_buf, GST_BUFFER_DATA(buf), GST_BUFFER_SIZE(buf));
+
   char * y_buf = in_map.data;
   char * c_buf = in_map.data + baseConfig.nInputWidth * baseConfig.nInputHeight;
- // fprintf(stderr,"INPUT BUFFER SIZE %d , %d \n", in_map.size, 3*baseConfig.nInputWidth * baseConfig.nInputHeight/2);
- // fprintf(stderr,"COPY the y\n");
+
   memcpy(inputBuffer.pAddrVirY, y_buf, baseConfig.nInputWidth * baseConfig.nInputHeight);
- // fprintf(stderr,"COPY the c\n");
   memcpy(inputBuffer.pAddrVirC, c_buf, (baseConfig.nInputWidth * baseConfig.nInputHeight )/2);
 
- // fprintf(stderr,"IN CHIAN\n");
-  //encode here?
-  
+  //no idea what this does...
   inputBuffer.bEnableCorp = 0;
   inputBuffer.sCropInfo.nLeft = 240;
   inputBuffer.sCropInfo.nTop = 240;
   inputBuffer.sCropInfo.nWidth = 240;
   inputBuffer.sCropInfo.nHeight = 240;
-  fprintf(stderr,"IN CHIAN\n");
 
   FlushCacheAllocInputBuffer (pVideoEnc, &inputBuffer);
 
-  fprintf(stderr,"AddOneInputBuffer\n");
   AddOneInputBuffer (pVideoEnc, &inputBuffer);
-  fprintf(stderr,"Encode\n");
   VideoEncodeOneFrame (pVideoEnc);
-  fprintf(stderr,"AlreadyUnused\n");
 
   AlreadyUsedInputBuffer (pVideoEnc, &inputBuffer);
   ReturnOneAllocInputBuffer (pVideoEnc, &inputBuffer);
-  fprintf(stderr,"GetOneBitstream\n");
 
   GetOneBitstreamFrame (pVideoEnc, &outputBuffer);
   
-  fprintf(stderr, "%08x %d %lld\n",outputBuffer.nFlag,outputBuffer.nID, outputBuffer.nPts);
-  // TODO: use gst_pad_alloc_buffer
-  //fprintf(stderr,"LENGTH OF ENCODED %u\n",encoder->bytestream_length);
-  //fwrite (sps_pps_data.pBuffer, 1, sps_pps_data.nLength, out_file);
-  //fprintf(stderr,"Map out buffer %d %d = %d\n",outputBuffer.nSize0,sps_pps_data.nLength,outputBuffer.nSize0+sps_pps_data.nLength);
-	
-
   int keyframe = outputBuffer.nFlag & 1; //is this a keyframe?
 
+  //attach SPS to each keyframe
   if (keyframe==1 || filter->write_sps_pps==1) {
 	  outbuf = gst_buffer_new_and_alloc(outputBuffer.nSize0+sps_pps_data.nLength);
 	  gst_buffer_map (outbuf, &out_map, GST_MAP_WRITE);
@@ -573,21 +548,17 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	  memcpy(out_map.data, outputBuffer.pData0, outputBuffer.nSize0);
   }
 
-  //gst_buffer_set_caps(outbuf, GST_PAD_CAPS(filter->srcpad))
-  //fprintf(stderr,"Get sps\n");
   if (outputBuffer.nSize1) {
-	fprintf(stderr,"CRAP!\n");
+	fprintf(stderr,"Uh oh...!\n");
   }
   FreeOneBitStreamFrame (pVideoEnc, &outputBuffer);
   GST_BUFFER_TIMESTAMP(outbuf) = GST_BUFFER_TIMESTAMP(buf);
-  //gst_buffer_unref(buf);
-  //fprintf(stderr,"End encode\n");
+
   gst_buffer_unmap (buf, &in_map);
   gst_buffer_unmap (outbuf, &out_map);
   gst_buffer_unref (buf);
   GstFlowReturn r =  gst_pad_push (filter->srcpad, outbuf);
 
-  //fprintf(stderr,"End encode x2\n");
   return r;
 }
 
