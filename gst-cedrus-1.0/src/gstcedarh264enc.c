@@ -71,6 +71,8 @@
 GST_DEBUG_CATEGORY_STATIC (gst_cedarh264enc_debug);
 #define GST_CAT_DEFAULT gst_cedarh264enc_debug
 
+char * encodings[] = {"baseline", "main", "high"};
+
 struct h264enc_params params;
 h264enc * encoder = NULL;
 
@@ -150,6 +152,10 @@ static gboolean alloc_cedar_bufs(Gstcedarh264enc *cedarelement)
 	params.qp = cedarelement->qp;
 	fprintf(stderr,"CEDAR has %d keyframe, profile %d, level %d, qp %d\n",cedarelement->keyframe,cedarelement->profile_idc, cedarelement->level_idc, cedarelement->qp);
 	params.keyframe_interval = cedarelement->keyframe;
+	if (params.profile_idc==0 || params.level_idc==0 || params.keyframe_interval==0) {
+		fprintf(stderr, "Profile,keyframe and level must be set!\n");
+		exit(1);
+	}
 	
         encoder = h264enc_new(&params);
 	
@@ -344,7 +350,7 @@ gst_cedarh264enc_get_property (GObject * object, guint prop_id,
       g_value_set_int (value, filter->d_qp);
       break;
     case PROP_SPS:
-      g_value_set_int (value, encoder->write_sps_pps);
+      g_value_set_int (value, filter->write_sps_pps);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -378,17 +384,30 @@ gst_cedarh264enc_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 		gst_video_info_from_caps(&info, caps);
 		filter->width=info.width;
 		filter->height=info.height;	
+	
+		char * profile=encodings[0];
+		if (filter->profile_idc==77) {
+			profile=encodings[1];
+		} else if (filter->profile_idc==100) {
+			profile=encodings[2];
+		}
+	
+		float level=filter->level_idc;
+		level/=10;
+		char level_str_l[10];
+		sprintf(level_str_l, "%0.1f", level);
+		char * level_str = strdup(level_str_l);
+		fprintf(stderr, "%d %f %s\n",filter->level_idc, level , level_str);
 		
+	
 		GstCaps * othercaps = gst_caps_copy (gst_pad_get_pad_template_caps(filter->srcpad));
 		gst_caps_set_simple (othercaps,
 			"width", G_TYPE_INT, info.width,
 			"height", G_TYPE_INT, info.height,
 			"framerate", GST_TYPE_FRACTION, info.fps_n, info.fps_d,
-			"profile", G_TYPE_STRING, filter->profile_idc==66 ? "baseline" : "main" , NULL);
-		if (filter->profile_idc!=66 && filter->profile_idc!=77) {
-			fprintf(stderr,"please use either baseline or main\n");
-			exit(1);
-		}
+			"profile", G_TYPE_STRING, profile ,
+			"level", G_TYPE_STRING, level_str,
+			NULL);
 		
 		ret = gst_pad_set_caps (otherpad, othercaps);
 		gst_caps_unref(othercaps);

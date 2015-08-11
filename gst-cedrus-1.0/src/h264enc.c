@@ -390,7 +390,7 @@ int h264enc_encode_picture(h264enc *c)
 	//writel((16 << 16) | ((c->pic_init_qp-10) << 8) | (c->pic_init_qp+10), c->regs + VE_AVC_QP);
 	//writel((4 << 16) | (51 << 8) | 10, c->regs + VE_AVC_QP);
 	writel((4 << 16) | ((c->pic_init_qp+c->d_qp) << 8) | (c->pic_init_qp+c->d_qp), c->regs + VE_AVC_QP);
-	//writel(0x00000104, c->regs + VE_AVC_MOTION_EST);
+	writel(0x00000104, c->regs + VE_AVC_MOTION_EST);
 
 
 	/* trigger encoding */
