@@ -76,6 +76,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_cedarxh264enc_debug);
 #define GST_CAT_DEFAULT gst_cedarxh264enc_debug
 
 
+char * encodings[] = { "baseline", "main", "high" }; 
+
+
 VencBaseConfig baseConfig; 
 VencAllocateBufferParam bufferParam;
 VideoEncoder *pVideoEnc;
@@ -170,7 +173,11 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
 	//* h264 param
 	VencH264Param h264Param;
 	h264Param.bEntropyCodingCABAC = 1;
-	h264Param.nBitrate = 4 * 1024 * 1024;	/* bps */
+	if (cedarelement->bitrate!=0) {
+		h264Param.nBitrate = cedarelement->bitrate;	/* bps */
+	} else {
+		h264Param.nBitrate = 4 * 1024 * 1024;	/* bps */
+	}
 	bitrate = h264Param.nBitrate; //keep track of what the HW was set to last
 	cedarelement->bitrate=bitrate; //keep track of what user set last
 	h264Param.nFramerate = 30;	/* fps */
@@ -185,10 +192,12 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
         if (cedarelement->profile_idc!=0) {
 		h264Param.sProfileLevel.nProfile = cedarelement->profile_idc;
 	}
+	cedarelement->profile_idc=h264Param.sProfileLevel.nProfile;
 	h264Param.sProfileLevel.nLevel = VENC_H264Level31;
         if (cedarelement->level_idc!=0) {
 		h264Param.sProfileLevel.nLevel = cedarelement->level_idc;
 	}
+	cedarelement->level_idc=h264Param.sProfileLevel.nLevel;
 	//how far we are willing the QP to vary?
 	h264Param.sQPRange.nMinqp = 10;
 	h264Param.sQPRange.nMaxqp = 40;
@@ -324,8 +333,9 @@ gst_cedarxh264enc_init (Gstcedarxh264enc * filter)
 {
   pVideoEnc=NULL;
   filter->keyframe=0;
-  filter->profile_idc=0;
-  filter->level_idc=0;
+  filter->profile_idc=VENC_H264ProfileMain;
+  filter->level_idc=VENC_H264Level31;
+  filter->bitrate=0;
   //sink pad
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
   gst_pad_set_event_function (filter->sinkpad,
@@ -436,13 +446,30 @@ gst_cedarxh264enc_sink_event (GstPad * pad, GstObject * parent, GstEvent * event
 		gst_video_info_from_caps(&info, caps);
 		filter->width=info.width;
 		filter->height=info.height;	
+	
+
+		float level=filter->level_idc;
+		level/=10;
+		char level_str_l[10];
+		sprintf(level_str_l, "%0.1f", level);
+		char * level_str = strdup(level_str_l);
+		fprintf(stderr, "%d %f %s\n",filter->level_idc, level , level_str);
 		
+		char * profile = encodings[0];
+		if (filter->profile_idc==77) {
+			profile=encodings[1];
+		} else if (filter->profile_idc==100) {
+			profile=encodings[2];
+		}
+
 		GstCaps * othercaps = gst_caps_copy (gst_pad_get_pad_template_caps(filter->srcpad));
 		gst_caps_set_simple (othercaps,
 			"width", G_TYPE_INT, info.width,
 			"height", G_TYPE_INT, info.height,
 			"framerate", GST_TYPE_FRACTION, info.fps_n, info.fps_d,
-			"profile", G_TYPE_STRING,"main" , NULL);
+			"profile", G_TYPE_STRING,profile,
+			"level", G_TYPE_STRING, level_str, 
+			NULL);
 		
 		ret = gst_pad_set_caps (otherpad, othercaps);
 		gst_caps_unref(othercaps);
