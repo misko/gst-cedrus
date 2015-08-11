@@ -74,6 +74,12 @@ struct _Gstcedarxh264enc
   gboolean silent;
         int width;
         int height;
+  int bitrate;
+  int keyframe;
+  int profile_idc;
+  int level_idc;
+  int write_keyframe;
+  int write_sps_pps;
   
 };
 

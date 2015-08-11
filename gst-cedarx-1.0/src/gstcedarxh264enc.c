@@ -68,7 +68,7 @@
 #include <time.h>
 #include <assert.h>
 #include "vencoder.h"
-#include "log.h"
+//#include "log.h"
 
 #include "gstcedarxh264enc.h"
 
@@ -82,7 +82,8 @@ VideoEncoder *pVideoEnc;
 VencHeaderData sps_pps_data;
 VencInputBuffer inputBuffer;
 VencOutputBuffer outputBuffer;
-
+int frame_num;
+unsigned int bitrate;
 /* Filter signals and args */
 enum
 {
@@ -93,7 +94,12 @@ enum
 enum
 {
   PROP_0,
-  PROP_SILENT
+  PROP_SILENT,
+  PROP_KEYFRAME,
+  PROP_PROFILE_IDC,
+  PROP_LEVEL_IDC,
+  PROP_BITRATE,
+  PROP_SPS
 };
 
 /* the capabilities of the inputs and outputs.
@@ -162,12 +168,15 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
 	bufferParam.nSizeC = baseConfig.nInputWidth * baseConfig.nInputHeight / 2;
 	bufferParam.nBufferNum = 4;
 	fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
-	
+
+	frame_num=0;	
 
 	//* h264 param
 	VencH264Param h264Param;
 	h264Param.bEntropyCodingCABAC = 1;
 	h264Param.nBitrate = 4 * 1024 * 1024;	/* bps */
+	bitrate = h264Param.nBitrate;
+	cedarelement->bitrate=bitrate;
 	h264Param.nFramerate = 30;	/* fps */
 	h264Param.nCodingMode = VENC_FRAME_CODING;
 	int codecType = VENC_CODEC_H264;
@@ -196,9 +205,9 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
   	VideoEncInit (pVideoEnc, &baseConfig);
                 unsigned int head_num = 0;
                 VideoEncGetParameter(pVideoEnc, VENC_IndexParamH264SPSPPS, &sps_pps_data);
-                logd("sps_pps_data.nLength: %d", sps_pps_data.nLength);
-                for(head_num=0; head_num<sps_pps_data.nLength; head_num++)
-                        logd("the sps_pps :%02x\n", *(sps_pps_data.pBuffer+head_num));
+                //logd("sps_pps_data.nLength: %d", sps_pps_data.nLength);
+                //for(head_num=0; head_num<sps_pps_data.nLength; head_num++)
+                //        logd("the sps_pps :%02x\n", *(sps_pps_data.pBuffer+head_num));
         assert(sps_pps_data.nLength>0);
 
 	fprintf(stderr,"ALLOC CEDARX AND INIT x2\n");
@@ -270,6 +279,21 @@ gst_cedarxh264enc_class_init (Gstcedarxh264encClass * klass)
   g_object_class_install_property (gobject_class, PROP_SILENT,
       g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
           FALSE, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_KEYFRAME,
+      g_param_spec_int ("keyframe", "keyframe", "keyframe rate",1,60,
+          25, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_PROFILE_IDC,
+      g_param_spec_int ("profile_idc", "profile_idc", "profile_idc",1,254,
+          VENC_H264ProfileMain, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_LEVEL_IDC,
+      g_param_spec_int ("level_idc", "level_idc", "level_idc",1,254,
+          VENC_H264Level31, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_BITRATE,
+      g_param_spec_int ("bitrate", "bitrate", "bitrate", 10*1024,6 * 1024 * 1024 ,
+          4 * 1024 *1024 , G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_SPS,
+      g_param_spec_int ("sps", "sps", "sps",0,1,
+          1, G_PARAM_READWRITE));
 }
 
 /* initialize the new element
@@ -313,6 +337,23 @@ gst_cedarxh264enc_set_property (GObject * object, guint prop_id,
     case PROP_SILENT:
       filter->silent = g_value_get_boolean (value);
       break;
+    case PROP_KEYFRAME:
+      filter->keyframe = g_value_get_int(value);
+      break;
+    case PROP_PROFILE_IDC:
+      filter->profile_idc = g_value_get_int(value);
+      break;
+    case PROP_LEVEL_IDC:
+      filter->level_idc = g_value_get_int(value);
+      break;
+    case PROP_BITRATE:
+      filter->bitrate = g_value_get_int(value);
+      break;
+    case PROP_SPS:
+      fprintf(stderr,"SET TO WRITE SPS!!\n");
+      filter->write_sps_pps=1;
+      filter->write_keyframe=1;
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -328,6 +369,21 @@ gst_cedarxh264enc_get_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_SILENT:
       g_value_set_boolean (value, filter->silent);
+      break;
+    case PROP_KEYFRAME:
+      g_value_set_int (value, filter->keyframe);
+      break;
+    case PROP_PROFILE_IDC:
+      g_value_set_int (value, filter->profile_idc);
+      break;
+    case PROP_LEVEL_IDC:
+      g_value_set_int (value, filter->level_idc);
+      break;
+    case PROP_BITRATE:
+      g_value_set_int (value, filter->bitrate);
+      break;
+    case PROP_SPS:
+      g_value_set_int (value, filter->write_sps_pps);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -396,7 +452,7 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   filter = GST_CEDARXH264ENC (parent);
 
-  fprintf(stderr,"Start chain\n");
+ // fprintf(stderr,"Start chain\n");
   if (pVideoEnc==NULL) {
 	alloc_cedar_bufs(filter);
 
@@ -407,7 +463,7 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   //map the input
   gst_buffer_map (buf, &in_map, GST_MAP_READ);
 
-  fprintf(stderr,"input mapped\n");
+  //fprintf(stderr,"input mapped\n");
   if (G_UNLIKELY (in_map.size <= 0)) {
     // TODO: needed?
     GST_WARNING("Received empty buffer?");
@@ -417,22 +473,33 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
     return gst_pad_push (filter->srcpad, outbuf);
   }
 
-	fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
-  fprintf(stderr,"Alloc input buffer\n");
+  if (filter->write_keyframe==1) {
+    int value=1;
+    VideoEncSetParameter (pVideoEnc, VENC_IndexParamForceKeyFrame, &value);
+    filter->write_keyframe=0;
+  }
+
+  if (bitrate!=filter->bitrate) {
+    int value=bitrate;
+    VideoEncSetParameter (pVideoEnc, VENC_IndexParamBitrate, &value);
+    bitrate=filter->bitrate;
+  }
+ //fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
+ // fprintf(stderr,"Alloc input buffer\n");
   GetOneAllocInputBuffer (pVideoEnc, &inputBuffer);
-  fprintf(stderr,"Alloc input buffer - done\n");
+ // fprintf(stderr,"Alloc input buffer - done\n");
   
-   fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
+  // fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
   //memcpy(filter->input_buf, GST_BUFFER_DATA(buf), GST_BUFFER_SIZE(buf));
   char * y_buf = in_map.data;
   char * c_buf = in_map.data + baseConfig.nInputWidth * baseConfig.nInputHeight;
-  fprintf(stderr,"INPUT BUFFER SIZE %d , %d \n", in_map.size, 3*baseConfig.nInputWidth * baseConfig.nInputHeight/2);
-  fprintf(stderr,"COPY the y\n");
+ // fprintf(stderr,"INPUT BUFFER SIZE %d , %d \n", in_map.size, 3*baseConfig.nInputWidth * baseConfig.nInputHeight/2);
+ // fprintf(stderr,"COPY the y\n");
   memcpy(inputBuffer.pAddrVirY, y_buf, baseConfig.nInputWidth * baseConfig.nInputHeight);
-  fprintf(stderr,"COPY the c\n");
+ // fprintf(stderr,"COPY the c\n");
   memcpy(inputBuffer.pAddrVirC, c_buf, (baseConfig.nInputWidth * baseConfig.nInputHeight )/2);
 
-  fprintf(stderr,"IN CHIAN\n");
+ // fprintf(stderr,"IN CHIAN\n");
   //encode here?
   
   inputBuffer.bEnableCorp = 0;
@@ -440,36 +507,46 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   inputBuffer.sCropInfo.nTop = 240;
   inputBuffer.sCropInfo.nWidth = 240;
   inputBuffer.sCropInfo.nHeight = 240;
-  fprintf(stderr,"IN CHIAN\n");
+  //fprintf(stderr,"IN CHIAN\n");
 
   FlushCacheAllocInputBuffer (pVideoEnc, &inputBuffer);
 
-  fprintf(stderr,"AddOneInputBuffer\n");
+  //fprintf(stderr,"AddOneInputBuffer\n");
   AddOneInputBuffer (pVideoEnc, &inputBuffer);
-  fprintf(stderr,"Encode\n");
+  //fprintf(stderr,"Encode\n");
   VideoEncodeOneFrame (pVideoEnc);
-  fprintf(stderr,"AlreadyUnused\n");
+  //fprintf(stderr,"AlreadyUnused\n");
 
   AlreadyUsedInputBuffer (pVideoEnc, &inputBuffer);
   ReturnOneAllocInputBuffer (pVideoEnc, &inputBuffer);
-  fprintf(stderr,"GetOneBitstream\n");
+  //fprintf(stderr,"GetOneBitstream\n");
 
   GetOneBitstreamFrame (pVideoEnc, &outputBuffer);
   
+  //fprintf(stderr, "%08x %d %lld\n",outputBuffer.nFlag,outputBuffer.nID, outputBuffer.nPts);
   // TODO: use gst_pad_alloc_buffer
   //fprintf(stderr,"LENGTH OF ENCODED %u\n",encoder->bytestream_length);
   //fwrite (sps_pps_data.pBuffer, 1, sps_pps_data.nLength, out_file);
-  fprintf(stderr,"Map out buffer %d %d = %d\n",outputBuffer.nSize0,sps_pps_data.nLength,outputBuffer.nSize0+sps_pps_data.nLength);
-  outbuf = gst_buffer_new_and_alloc(outputBuffer.nSize0+sps_pps_data.nLength);
-  gst_buffer_map (outbuf, &out_map, GST_MAP_WRITE);
+  //fprintf(stderr,"Map out buffer %d %d = %d\n",outputBuffer.nSize0,sps_pps_data.nLength,outputBuffer.nSize0+sps_pps_data.nLength);
+	
+
+  int keyframe = outputBuffer.nFlag & 1; //is this a keyframe?
+
+  if (keyframe==1 || filter->write_sps_pps==1) {
+	  outbuf = gst_buffer_new_and_alloc(outputBuffer.nSize0+sps_pps_data.nLength);
+	  gst_buffer_map (outbuf, &out_map, GST_MAP_WRITE);
+	  VideoEncGetParameter (pVideoEnc, VENC_IndexParamH264SPSPPS, &sps_pps_data);
+	  memcpy(out_map.data, sps_pps_data.pBuffer,sps_pps_data.nLength);
+	  memcpy(out_map.data+sps_pps_data.nLength, outputBuffer.pData0, outputBuffer.nSize0);
+	  filter->write_sps_pps=0;
+  } else {
+	  outbuf = gst_buffer_new_and_alloc(outputBuffer.nSize0);
+	  gst_buffer_map (outbuf, &out_map, GST_MAP_WRITE);
+	  memcpy(out_map.data, outputBuffer.pData0, outputBuffer.nSize0);
+  }
 
   //gst_buffer_set_caps(outbuf, GST_PAD_CAPS(filter->srcpad))
-  fprintf(stderr,"Get sps\n");
-  VideoEncGetParameter (pVideoEnc, VENC_IndexParamH264SPSPPS, &sps_pps_data);
-  fprintf(stderr,"Get sps - copy in\n");
-  memcpy(out_map.data, sps_pps_data.pBuffer,sps_pps_data.nLength);
-  fprintf(stderr,"Copy data\n");
-  memcpy(out_map.data+sps_pps_data.nLength, outputBuffer.pData0, outputBuffer.nSize0);
+  //fprintf(stderr,"Get sps\n");
   if (outputBuffer.nSize1) {
 	fprintf(stderr,"CRAP!\n");
   }
@@ -514,7 +591,13 @@ static GstStateChangeReturn
 		case GST_STATE_CHANGE_PAUSED_TO_READY:
 			break;
 		case GST_STATE_CHANGE_READY_TO_NULL:
-			g_print("CEDARX | READY -> NULL // TODO !!! FREE MEMORY!!\n");
+			g_print("CEDARX | READY -> NULL \n");
+			if (pVideoEnc!=NULL) {
+				ReleaseAllocInputBuffer(pVideoEnc);
+				VideoEncUnInit(pVideoEnc);
+				VideoEncDestroy(pVideoEnc);
+				pVideoEnc=NULL;
+			}
 			//h264enc_free(encoder);
 			break;
 		default:
