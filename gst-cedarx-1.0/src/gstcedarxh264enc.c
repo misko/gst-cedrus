@@ -82,7 +82,6 @@ VideoEncoder *pVideoEnc;
 VencHeaderData sps_pps_data;
 VencInputBuffer inputBuffer;
 VencOutputBuffer outputBuffer;
-int frame_num;
 unsigned int bitrate;
 /* Filter signals and args */
 enum
@@ -144,15 +143,13 @@ static GstFlowReturn gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, 
 
 static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
 {
-
-	fprintf(stderr,"ALLOC CEDARX AND INIT\n");
+	//clear the two parameter structs
 	memset (&baseConfig, 0, sizeof (VencBaseConfig));
 	memset (&bufferParam, 0, sizeof (VencAllocateBufferParam)); 
 
 	int src_width = cedarelement->width;
 	int src_height = cedarelement->height;
 
-	fprintf(stderr,"%d x %d\n", src_width, src_height);
 	baseConfig.nInputWidth = src_width;
 	baseConfig.nInputHeight = src_height;
 	baseConfig.nStride = src_width;
@@ -164,36 +161,40 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
 	baseConfig.nDstHeight = dst_height;
 	baseConfig.eInputFormat = VENC_PIXEL_YUV420SP;
 
+
+	//set the space for t Y and UV arrays , one is WxH the other is WxH/2
 	bufferParam.nSizeY = baseConfig.nInputWidth * baseConfig.nInputHeight;
 	bufferParam.nSizeC = baseConfig.nInputWidth * baseConfig.nInputHeight / 2;
 	bufferParam.nBufferNum = 4;
-	fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
-
-	frame_num=0;	
 
 	//* h264 param
 	VencH264Param h264Param;
 	h264Param.bEntropyCodingCABAC = 1;
 	h264Param.nBitrate = 4 * 1024 * 1024;	/* bps */
-	bitrate = h264Param.nBitrate;
-	cedarelement->bitrate=bitrate;
+	bitrate = h264Param.nBitrate; //keep track of what the HW was set to last
+	cedarelement->bitrate=bitrate; //keep track of what user set last
 	h264Param.nFramerate = 30;	/* fps */
+        if (cedarelement->keyframe!=0) {
+		h264Param.nFramerate = cedarelement->keyframe;
+	}
 	h264Param.nCodingMode = VENC_FRAME_CODING;
 	int codecType = VENC_CODEC_H264;
 
-	h264Param.nMaxKeyInterval = 30;
+	h264Param.nMaxKeyInterval = h264Param.nFramerate;
 	h264Param.sProfileLevel.nProfile = VENC_H264ProfileMain;
+        if (cedarelement->profile_idc!=0) {
+		h264Param.sProfileLevel.nProfile = cedarelement->profile_idc;
+	}
 	h264Param.sProfileLevel.nLevel = VENC_H264Level31;
+        if (cedarelement->level_idc!=0) {
+		h264Param.sProfileLevel.nLevel = cedarelement->level_idc;
+	}
 	h264Param.sQPRange.nMinqp = 10;
 	h264Param.sQPRange.nMaxqp = 40;
 
 
-	fprintf(stderr,"Create pVideoEnc %p\n",pVideoEnc);
 	pVideoEnc = VideoEncCreate (codecType);
-	fprintf(stderr,"Create pVideoEnc %p - done\n",pVideoEnc);
-	fprintf(stderr,"Setting params %p - done\n",&h264Param);
 	VideoEncSetParameter (pVideoEnc, VENC_IndexParamH264Param, &h264Param);
-	fprintf(stderr,"%d then %d | %d %d\n", bufferParam.nSizeY, bufferParam.nSizeC, baseConfig.nInputWidth, baseConfig.nInputHeight);
 
 	int value=0;
 	VideoEncSetParameter (pVideoEnc, VENC_IndexParamIfilter, &value);
@@ -330,7 +331,9 @@ static void
 gst_cedarxh264enc_init (Gstcedarxh264enc * filter)
 {
   pVideoEnc=NULL;
-   g_print("INITX2!\n");
+  filter->keyframe=0;
+  filter->profile_idc=0;
+  filter->level_idc=0;
   //sink pad
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
   gst_pad_set_event_function (filter->sinkpad,
