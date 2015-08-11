@@ -72,6 +72,9 @@ struct _Gstcedarxh264enc
   GstPad *sinkpad, *srcpad;
 
   gboolean silent;
+        int width;
+        int height;
+  
 };
 
 struct _Gstcedarxh264encClass 
