@@ -562,22 +562,23 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   int keyframe = outputBuffer.nFlag & 1; //is this a keyframe?
 
   //attach SPS to each keyframe
+  size_t offset = 0;
   if (keyframe==1 || filter->write_sps_pps==1) {
-	  outbuf = gst_buffer_new_and_alloc(outputBuffer.nSize0+sps_pps_data.nLength);
-	  gst_buffer_map (outbuf, &out_map, GST_MAP_WRITE);
-	  VideoEncGetParameter (pVideoEnc, VENC_IndexParamH264SPSPPS, &sps_pps_data);
+	offset=sps_pps_data.nLength;
+	VideoEncGetParameter (pVideoEnc, VENC_IndexParamH264SPSPPS, &sps_pps_data);
+  }
+  outbuf = gst_buffer_new_and_alloc(offset+outputBuffer.nSize0+outputBuffer.nSize1);
+  gst_buffer_map (outbuf, &out_map, GST_MAP_WRITE);
+
+  if (offset>0) {
 	  memcpy(out_map.data, sps_pps_data.pBuffer,sps_pps_data.nLength);
-	  memcpy(out_map.data+sps_pps_data.nLength, outputBuffer.pData0, outputBuffer.nSize0);
-	  filter->write_sps_pps=0;
-  } else {
-	  outbuf = gst_buffer_new_and_alloc(outputBuffer.nSize0);
-	  gst_buffer_map (outbuf, &out_map, GST_MAP_WRITE);
-	  memcpy(out_map.data, outputBuffer.pData0, outputBuffer.nSize0);
+  }
+  memcpy(out_map.data+offset, outputBuffer.pData0, outputBuffer.nSize0);
+  if (outputBuffer.nSize1) {
+          fprintf(stderr,"%u %u %u\n",outputBuffer.nSize0, outputBuffer.nSize1, offset);
+          memcpy(out_map.data+offset+outputBuffer.nSize0, outputBuffer.pData1, outputBuffer.nSize1);
   }
 
-  if (outputBuffer.nSize1) {
-	fprintf(stderr,"Uh oh...!\n");
-  }
   FreeOneBitStreamFrame (pVideoEnc, &outputBuffer);
   GST_BUFFER_TIMESTAMP(outbuf) = GST_BUFFER_TIMESTAMP(buf);
 
