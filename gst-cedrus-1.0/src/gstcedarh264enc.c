@@ -274,7 +274,7 @@ gst_cedarh264enc_init (Gstcedarh264enc * filter)
 
   filter->silent = FALSE;
   filter->keyframe = 25;
-  filter->profile_idc = 71;
+  filter->profile_idc = 77;
   filter->level_idc = 41;
   filter->qp = 30;
 }
