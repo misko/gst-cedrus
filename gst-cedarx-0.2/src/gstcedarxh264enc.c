@@ -529,7 +529,7 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   //if user set bitrate and HW bitrate is out of sync, sync it
   if (bitrate!=filter->bitrate) {
-    int value=bitrate;
+    int value=filter->bitrate;
     VideoEncSetParameter (pVideoEnc, VENC_IndexParamBitrate, &value);
     bitrate=filter->bitrate;
   }
