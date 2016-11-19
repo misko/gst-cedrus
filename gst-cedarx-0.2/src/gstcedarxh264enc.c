@@ -85,7 +85,7 @@ VideoEncoder *pVideoEnc;
 VencHeaderData sps_pps_data;
 VencInputBuffer inputBuffer;
 VencOutputBuffer outputBuffer;
-unsigned int bitrate;
+//unsigned int bitrate;
 /* Filter signals and args */
 enum
 {
@@ -171,40 +171,46 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
 	bufferParam.nBufferNum = 4;
 
 	//* h264 param
-	VencH264Param h264Param;
-	h264Param.bEntropyCodingCABAC = 1;
+	cedarelement->h264config = (VencH264Param*)calloc(1,sizeof(VencH264Param)); 
+	if (cedarelement->h264config==NULL) {
+		fprintf(stderr,"FAILED TO MALLOC h264config!\n");
+		exit(1);
+	}
+	//VencH264Param h264Param;
+	cedarelement->h264config->bEntropyCodingCABAC = 1;
 	if (cedarelement->bitrate!=0) {
-		h264Param.nBitrate = cedarelement->bitrate;	/* bps */
+		cedarelement->h264config->nBitrate = cedarelement->bitrate;	/* bps */
 	} else {
-		h264Param.nBitrate = 4 * 1024 * 1024;	/* bps */
+		cedarelement->h264config->nBitrate = 4 * 1024 * 1024;	/* bps */
 	}
-	bitrate = h264Param.nBitrate; //keep track of what the HW was set to last
-	cedarelement->bitrate=bitrate; //keep track of what user set last
-	h264Param.nFramerate = 30;	/* fps */
+	//bitrate = cedarelement->h264config->nBitrate; //keep track of what the HW was set to last
+	//cedarelement->bitrate=bitrate; //keep track of what user set last
+	cedarelement->bitrate=cedarelement->h264config->nBitrate; //keep track of what user set last
+	cedarelement->h264config->nFramerate = 30;	/* fps */
         if (cedarelement->keyframe!=0) {
-		h264Param.nFramerate = cedarelement->keyframe;
+		cedarelement->h264config->nFramerate = cedarelement->keyframe;
 	}
-	h264Param.nCodingMode = VENC_FRAME_CODING;
+	cedarelement->h264config->nCodingMode = VENC_FRAME_CODING;
 	int codecType = VENC_CODEC_H264;
 
-	h264Param.nMaxKeyInterval = h264Param.nFramerate;
-	h264Param.sProfileLevel.nProfile = VENC_H264ProfileMain;
+	cedarelement->h264config->nMaxKeyInterval = cedarelement->h264config->nFramerate;
+	cedarelement->h264config->sProfileLevel.nProfile = VENC_H264ProfileMain;
         if (cedarelement->profile_idc!=0) {
-		h264Param.sProfileLevel.nProfile = cedarelement->profile_idc;
+		cedarelement->h264config->sProfileLevel.nProfile = cedarelement->profile_idc;
 	}
-	cedarelement->profile_idc=h264Param.sProfileLevel.nProfile;
-	h264Param.sProfileLevel.nLevel = VENC_H264Level31;
+	cedarelement->profile_idc=cedarelement->h264config->sProfileLevel.nProfile;
+	cedarelement->h264config->sProfileLevel.nLevel = VENC_H264Level31;
         if (cedarelement->level_idc!=0) {
-		h264Param.sProfileLevel.nLevel = cedarelement->level_idc;
+		cedarelement->h264config->sProfileLevel.nLevel = cedarelement->level_idc;
 	}
-	cedarelement->level_idc=h264Param.sProfileLevel.nLevel;
+	cedarelement->level_idc=cedarelement->h264config->sProfileLevel.nLevel;
 	//how far we are willing the QP to vary?
-	h264Param.sQPRange.nMinqp = 10;
-	h264Param.sQPRange.nMaxqp = 40;
+	cedarelement->h264config->sQPRange.nMinqp = 10;
+	cedarelement->h264config->sQPRange.nMaxqp = 40;
 
 	//make the actual encoder object
 	pVideoEnc = VideoEncCreate (codecType);
-	VideoEncSetParameter (pVideoEnc, VENC_IndexParamH264Param, &h264Param);
+	VideoEncSetParameter (pVideoEnc, VENC_IndexParamH264Param, cedarelement->h264config);
 
 	//set two parameters found in example
 	int value=0;
@@ -336,6 +342,7 @@ gst_cedarxh264enc_init (Gstcedarxh264enc * filter)
   filter->profile_idc=VENC_H264ProfileMain;
   filter->level_idc=VENC_H264Level31;
   filter->bitrate=0;
+  filter->h264config=NULL;
   //sink pad
   filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
   gst_pad_set_event_function (filter->sinkpad,
@@ -528,10 +535,12 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   }
 
   //if user set bitrate and HW bitrate is out of sync, sync it
-  if (bitrate!=filter->bitrate) {
-    int value=filter->bitrate;
-    VideoEncSetParameter (pVideoEnc, VENC_IndexParamBitrate, &value);
-    bitrate=filter->bitrate;
+  if (filter->h264config!=NULL && filter->h264config->nBitrate!=filter->bitrate) {
+    filter->h264config->nBitrate=filter->bitrate;	
+    //int value=filter->bitrate;
+    VideoEncSetParameter (pVideoEnc, VENC_IndexParamH264Param, filter->h264config);
+    //VideoEncSetParameter (pVideoEnc, VENC_IndexParamBitrate, &value);
+    //bitrate=filter->bitrate;
   }
 
   GetOneAllocInputBuffer (pVideoEnc, &inputBuffer);

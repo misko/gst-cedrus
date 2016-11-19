@@ -47,7 +47,7 @@
 #define __GST_CEDARXH264ENC_H__
 
 #include <gst/gst.h>
-
+#include "vencoder.h"
 G_BEGIN_DECLS
 
 /* #defines don't like whitespacey bits */
@@ -80,7 +80,7 @@ struct _Gstcedarxh264enc
   int level_idc;
   int write_keyframe;
   int write_sps_pps;
-  
+  VencH264Param * h264config;  
 };
 
 struct _Gstcedarxh264encClass 
