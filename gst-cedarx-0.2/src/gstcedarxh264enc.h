@@ -76,6 +76,7 @@ struct _Gstcedarxh264enc
         int height;
   int bitrate;
   int keyframe;
+  int CABAC;
   int profile_idc;
   int level_idc;
   int write_keyframe;

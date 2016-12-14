@@ -101,6 +101,7 @@ enum
   PROP_PROFILE_IDC,
   PROP_LEVEL_IDC,
   PROP_BITRATE,
+  PROP_CABAC,
   PROP_SPS
 };
 
@@ -177,7 +178,8 @@ static gboolean alloc_cedar_bufs(Gstcedarxh264enc *cedarelement)
 		exit(1);
 	}
 	//VencH264Param h264Param;
-	cedarelement->h264config->bEntropyCodingCABAC = 1;
+	//cedarelement->h264config->bEntropyCodingCABAC = 1;
+	cedarelement->h264config->bEntropyCodingCABAC = cedarelement->CABAC;
 	if (cedarelement->bitrate!=0) {
 		cedarelement->h264config->nBitrate = cedarelement->bitrate;	/* bps */
 	} else {
@@ -315,6 +317,9 @@ gst_cedarxh264enc_class_init (Gstcedarxh264encClass * klass)
   g_object_class_install_property (gobject_class, PROP_KEYFRAME,
       g_param_spec_int ("keyframe", "keyframe", "keyframe rate",1,60,
           25, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_CABAC,
+      g_param_spec_int ("CABAC", "CABAC", "CABAC",0,1,
+          1, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_PROFILE_IDC,
       g_param_spec_int ("profile_idc", "profile_idc", "profile_idc",1,254,
           VENC_H264ProfileMain, G_PARAM_READWRITE));
@@ -340,6 +345,7 @@ gst_cedarxh264enc_init (Gstcedarxh264enc * filter)
   pVideoEnc=NULL;
   filter->keyframe=0;
   filter->profile_idc=VENC_H264ProfileMain;
+  filter->CABAC=0;
   filter->level_idc=VENC_H264Level31;
   filter->bitrate=0;
   filter->h264config=NULL;
@@ -380,6 +386,9 @@ gst_cedarxh264enc_set_property (GObject * object, guint prop_id,
     case PROP_PROFILE_IDC:
       filter->profile_idc = g_value_get_int(value);
       break;
+    case PROP_CABAC:
+      filter->CABAC = g_value_get_int(value);
+      break;
     case PROP_LEVEL_IDC:
       filter->level_idc = g_value_get_int(value);
       break;
@@ -411,6 +420,9 @@ gst_cedarxh264enc_get_property (GObject * object, guint prop_id,
       break;
     case PROP_PROFILE_IDC:
       g_value_set_int (value, filter->profile_idc);
+      break;
+    case PROP_CABAC:
+      g_value_set_int (value, filter->CABAC);
       break;
     case PROP_LEVEL_IDC:
       g_value_set_int (value, filter->level_idc);
@@ -527,12 +539,6 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   }
 
 
-  //if we force write keyframe
-  if (filter->write_keyframe==1) {
-    int value=1;
-    VideoEncSetParameter (pVideoEnc, VENC_IndexParamForceKeyFrame, &value);
-    filter->write_keyframe=0;
-  }
 
   //if user set bitrate and HW bitrate is out of sync, sync it
   if (filter->h264config!=NULL && filter->h264config->nBitrate!=filter->bitrate) {
@@ -561,6 +567,12 @@ gst_cedarxh264enc_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
   FlushCacheAllocInputBuffer (pVideoEnc, &inputBuffer);
 
   AddOneInputBuffer (pVideoEnc, &inputBuffer);
+  //if we force write keyframe
+  if (filter->write_keyframe==1) {
+    int value=1;
+    VideoEncSetParameter (pVideoEnc, VENC_IndexParamForceKeyFrame, &value);
+    filter->write_keyframe=0;
+  }
   VideoEncodeOneFrame (pVideoEnc);
 
   AlreadyUsedInputBuffer (pVideoEnc, &inputBuffer);
